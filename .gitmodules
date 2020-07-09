@@ -1,0 +1,3 @@
+[submodule "PS3Lib"]
+	path = PS3Lib
+	url = https://github.com/xX-TheDoctor-Xx/PS3Lib.git
