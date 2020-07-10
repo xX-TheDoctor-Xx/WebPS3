@@ -15,6 +15,7 @@ namespace WebPS3
             if (e.Data == "GET")
             {
                 StringBuilder builder = new StringBuilder();
+                builder.AppendLine("SUCCESS");
 
                 string[] enum_names = Enum.GetNames(typeof(SelectAPI));
 
@@ -36,8 +37,12 @@ namespace WebPS3
                 }
                 else
                 {
-                    Send("FAILED" + (int)ErrorCode.InvalidAPI);
+                    Send("FAILED " + (int)ErrorCode.INVALID_API);
                 }
+            }
+            else
+            {
+                Send("FAILED " + (int)ErrorCode.INVALID_API);
             }
         }
     }
