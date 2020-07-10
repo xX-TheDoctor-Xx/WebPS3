@@ -13,5 +13,6 @@ namespace WebPS3
         INVALID_PROCESS_ID_FORMAT,
         ATTACH_FAILED,
         INVALID_MEMORY_COMMAND,
+        INVALID_COMMAND,
     }
 }

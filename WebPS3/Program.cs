@@ -10,11 +10,7 @@ namespace WebPS3
         {
             var wss = new WebSocketServer(6969);
 
-            wss.AddWebSocketService<PS3APIHandler>("/api");
-            wss.AddWebSocketService<ConnectPS3Handler>("/connect");
-            wss.AddWebSocketService<AttachPS3Handler>("/attach");
-            wss.AddWebSocketService<DisconnectPS3Handler>("/disconnect");
-            wss.AddWebSocketService<MemoryPS3Handler>("/memory");
+            wss.AddWebSocketService<PS3APIHandler>("/");
 
             wss.Start();
             Console.ReadKey(true);
