@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace WebPS3
+﻿namespace WebPS3
 {
     public enum ErrorCode
     {
@@ -14,5 +10,6 @@ namespace WebPS3
         ATTACH_FAILED,
         INVALID_MEMORY_COMMAND,
         INVALID_COMMAND,
+        INVALID_SHUTDOWN_OPERATION,
     }
 }

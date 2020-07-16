@@ -1,7 +1,5 @@
 ﻿using PS3Lib;
 using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Text;
 using WebSocketSharp;
 using WebSocketSharp.Server;
@@ -10,7 +8,7 @@ namespace WebPS3
 {
     public class PS3APIHandler : WebSocketBehavior
     {
-        protected override void OnMessage(MessageEventArgs e)
+        private object NotConnectedMethods(MessageEventArgs e)
         {
             if (e.Data == "API_GET")
             {
@@ -22,7 +20,7 @@ namespace WebPS3
                 for (var i = 0; i < enum_names.Length; i++)
                     builder.AppendLine(enum_names[i]);
 
-                Send(builder.ToString());
+                return builder.ToString();
             }
             else if (e.Data.StartsWith("API_SELECT"))
             {
@@ -33,12 +31,10 @@ namespace WebPS3
                 if (Enum.TryParse(api, out apiEnum))
                 {
                     Globals.PS3_API.CurrentAPI = apiEnum;
-                    Send("SUCCESS");
+                    return "SUCCESS";
                 }
                 else
-                {
-                    Send("FAILED " + (int)ErrorCode.INVALID_API);
-                }
+                    return "FAILED" + (int)ErrorCode.INVALID_API;
             }
             // CCAPI console list
             else if (e.Data == "CONNECT_LIST")
@@ -51,7 +47,7 @@ namespace WebPS3
                 for (var i = 0; i < list.Count; i++)
                     builder.AppendLine(list[i].Name + " " + list[i].Ip);
 
-                Send(builder.ToString());
+                return builder.ToString();
             }
             // TMAPI
             else if (e.Data.StartsWith("CONNECT_TARGET"))
@@ -59,27 +55,24 @@ namespace WebPS3
                 if (int.TryParse(e.Data.Substring(15), out int target))
                 {
                     Globals.PS3_API.ConnectTarget(target);
-                    Send("SUCCESS");
+                    return "SUCCESS";
                 }
                 else
-                {
-                    Send("FAILED " + (int)ErrorCode.INVALID_TARGET);
-                }
+                    return "FAILED" + (int)ErrorCode.INVALID_TARGET;
             }
             else if (e.Data.StartsWith("CONNECT_IP"))
             {
                 string ip = e.Data.Substring(11);
-                if (Globals.PS3_API.ConnectTarget(ip))
-                {
-                    Send("SUCCESS");
-                }
-                else
-                {
-                    Send("FAILED " + (int)ErrorCode.CONNECTION_FAILED);
-                }
+                return (Globals.PS3_API.ConnectTarget(ip)) ? "SUCCESS" : "FAILED" + (int)ErrorCode.CONNECTION_FAILED;
             }
+            else
+                return null;
+        }
+
+        private object ConnectedNotAttachedMethods(MessageEventArgs e)
+        {
             // MAPI
-            else if (e.Data == "ATTACH_GET")
+            if (e.Data == "ATTACH_GET")
             {
                 var ids = Globals.PS3_API.MAPI.Process.GetPidProcesses();
 
@@ -87,11 +80,9 @@ namespace WebPS3
                 builder.AppendLine("SUCCESS");
 
                 foreach (var id in ids)
-                {
                     builder.AppendLine(id.ToString());
-                }
 
-                Send(builder.ToString());
+                return builder.ToString();
             }
             else if (e.Data.StartsWith("ATTACH"))
             {
@@ -101,22 +92,21 @@ namespace WebPS3
                     if (uint.TryParse(e.Data.Substring(7), out uint id))
                     {
                         Globals.PS3_API.MAPIProcessID = id;
-                        Globals.PS3_API.AttachProcess();
+                        return (Globals.PS3_API.AttachProcess()) ? "SUCCESS" : "FAILED" + (int)ErrorCode.ATTACH_FAILED;
                     }
                     else
-                    {
-                        Send("FAILED " + (int)ErrorCode.INVALID_PROCESS_ID_FORMAT);
-                    }
+                        return "FAILED" + (int)ErrorCode.INVALID_PROCESS_ID_FORMAT;
                 }
                 else
-                {
-                    if (Globals.PS3_API.AttachProcess())
-                        Send("SUCCESS");
-                    else
-                        Send("FAILED " + (int)ErrorCode.ATTACH_FAILED);
-                }
+                    return (Globals.PS3_API.AttachProcess()) ? "SUCCESS" : "FAILED" + (int)ErrorCode.ATTACH_FAILED;
             }
-            else if (e.Data == "DISCONNECT")
+            else
+                return null;
+        }
+
+        private object ConnectedAttachedMethods(MessageEventArgs e)
+        {
+            if (e.Data == "DISCONNECT")
             {
                 try
                 {
@@ -124,8 +114,34 @@ namespace WebPS3
                 }
                 finally
                 {
-                    Send("SUCCESS");
                 }
+
+                return "SUCCESS";
+            }
+            else if (e.Data.StartsWith("SHUTDOWN"))
+            {
+                if (int.TryParse(e.Data.Substring(8), out int shutdownType))
+                {
+                    if (Globals.PS3_API.CurrentAPI == SelectAPI.ControlConsole)
+                    {
+                        // try catch if shutdownType doesnt exist
+                        Globals.PS3_API.CCAPI.ShutDown((RebootFlags)shutdownType);
+                    }
+                    else if (Globals.PS3_API.CurrentAPI == SelectAPI.ManagerAPI)
+                    {
+                        // same here
+                        Globals.PS3_API.MAPI.PS3.Power((PowerFlags)shutdownType);
+                    }
+                    else // TMAPI
+                    {
+                        // no need here
+                        Globals.PS3_API.TMAPI.PowerOff(shutdownType != 0);
+                    }
+
+                    return "SUCCESS";
+                }
+                else
+                    return "FAILED" + (int)ErrorCode.INVALID_SHUTDOWN_OPERATION;
             }
             else if (e.Data.StartsWith("MEMORY"))
             {
@@ -140,7 +156,7 @@ namespace WebPS3
 
                     Globals.PS3_API.SetMemory(address, bytes);
 
-                    Send("SUCCESS");
+                    return "SUCCESS";
                 }
                 else if (command == "MEMORY_GET")
                 {
@@ -148,17 +164,68 @@ namespace WebPS3
 
                     var bytes = Globals.PS3_API.GetBytes(address, length);
 
-                    Send(bytes);
+                    return bytes;
+                }
+                else
+                    return "FAILED " + (int)ErrorCode.INVALID_MEMORY_COMMAND;
+            }
+            else
+                return null;
+        }
+
+        protected override void OnMessage(MessageEventArgs e)
+        {
+            bool sent = false;
+
+            if (!Globals.PS3_API.IsConnected)
+            {
+                var output = NotConnectedMethods(e);
+                if (output is string)
+                {
+                    Send(Encoding.UTF8.GetBytes((string)output));
+                    sent = true;
+                }
+                else if (output is byte[])
+                {
+                    Send((byte[])output);
+                    sent = true;
+                }
+            }
+
+            if (Globals.PS3_API.IsConnected)
+            {
+                if (!Globals.PS3_API.IsAttached)
+                {
+                    var output = ConnectedNotAttachedMethods(e);
+                    if (output is string)
+                    {
+                        Send(Encoding.UTF8.GetBytes((string)output));
+                        sent = true;
+                    }
+                    else if (output is byte[])
+                    {
+                        Send((byte[])output);
+                        sent = true;
+                    }
                 }
                 else
                 {
-                    Send("FAILED " + (int)ErrorCode.INVALID_MEMORY_COMMAND);
+                    var output = ConnectedAttachedMethods(e);
+                    if (output is string)
+                    {
+                        Send(Encoding.UTF8.GetBytes((string)output));
+                        sent = true;
+                    }
+                    else if (output is byte[])
+                    {
+                        Send((byte[])output);
+                        sent = true;
+                    }
                 }
             }
-            else
-            {
-                Send("FAILED " + (int)ErrorCode.INVALID_COMMAND);
-            }
+
+            if (!sent)
+                Send("FAILED" + (int)ErrorCode.INVALID_COMMAND);
         }
     }
 }
